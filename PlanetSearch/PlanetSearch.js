@@ -70,7 +70,7 @@ var infoBar = {
     maxHp : 25,
 };
 var levelInfo = {
-    level : "Treasure?", 
+    level : "Intro", 
     door  : 'a',
     unitWidth : 40,
     unitHeight : 40,
