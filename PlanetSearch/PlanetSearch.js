@@ -70,7 +70,7 @@ var infoBar = {
     maxHp : 25,
 };
 var levelInfo = {
-    level : "Intro", 
+    level : "Treasure?", 
     door  : 'a',
     unitWidth : 40,
     unitHeight : 40,
@@ -4577,7 +4577,7 @@ var levels = {
                 door : 'c'
             },
             'b' : {
-    targetDoor : true,
+                targetDoor : true,
                 level : "Underground_Parkour_#1",
                 door : 'a'
             },
@@ -4585,14 +4585,10 @@ var levels = {
                 level : "Coins", 
                 door : 'a',
             },
-            'd' : {
-                level : "Coins", 
-                door : 'b',
-            }
         },
         plan : [
-            "                                      d",
-            "    cc         cc                     D",
+            "                                       ",
+            "    cc         cc                      ",
             "c                                      ",
             "D                                      ",
             "bbb    bbbbbbb     bbbbb   bbbb        ",
@@ -4617,12 +4613,12 @@ var levels = {
         doors : {
             'a' : {
                 level : "Treasure?",
-                door : 'a',
+                door : 'c',
             },
             'b' : {
-                  targetDoor : true,
-                level : "Treasure?",
-                door : 'd'
+                targetDoor : true,
+                level : "Underground_Parkour_#1",
+                door : 'a'
             },
         },
         signs : {
@@ -5537,8 +5533,8 @@ loader.loadGame = function()
 var mainLoop = function()
 {
     backgrounds.draw();
-    levels[levelInfo.level].act();
     pushMatrix();
+        levels[levelInfo.level].act();
         cam.view(gameObjects.getArray("player")[0]);
         gameObjects.apply();
         //gameObjects.drawBoundingBoxes();
@@ -5817,6 +5813,6 @@ keyPressed = function()
         loader.startLevelLoading(gameObjects.getArray("door").targetDoor);
     }
 };
-      }
-        if (typeof draw !== 'undefined') processing.draw = draw;
-    });
+  }
+    if (typeof draw !== 'undefined') processing.draw = draw;
+});
