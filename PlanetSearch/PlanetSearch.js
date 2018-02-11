@@ -76,7 +76,7 @@ var levelInfo = {
     unitHeight : 40,
     width : width,
     height : height,
-}; 
+};
 levelInfo.firstLevel = levelInfo.level;
 levelInfo.firstDoor = levelInfo.door;
 var loader = {};
