@@ -1005,6 +1005,8 @@ var screenUtils = {
 }; 
 screenUtils.levelProgressBar = new Bar(0, 395, width, 5, color(0, 0, 0, 50));//color(32, 104, 168, 100));
 screenUtils.levelProgressBar.noStroke = true;
+screenUtils.bossBar = new Bar(0, 20, width, 5, color(0, 0, 0, 100));
+screenUtils.bossBar.noStroke = true;
 screenUtils.shakeScreen = function(intensity, time)
 {
     this.stopped = false;
@@ -1085,10 +1087,7 @@ particles.create = function(x, y, amt, radius, color, velocityPV, lifeTime)
 {
     for(var i = 0; i < amt; i++)
     {
-        var particle = new Particle(
-        x + random(-radius, radius), 
-        y + random(-radius, radius), 
-        5, color);
+        var particle = new Particle(x + random(-radius, radius), y + random(-radius, radius), 5, color);
         particle.lifeTime = i; 
         if(velocityPV !== undefined)
         {
@@ -1515,7 +1514,7 @@ gameObjects.applyCollision = function(objA, physicsInfo)
             
             if(objA.name === objB.name && objA.id === objB.id)
             {
-                continue;   
+                continue;
             }
             
             var calculated = false;
@@ -1523,8 +1522,7 @@ gameObjects.applyCollision = function(objA, physicsInfo)
             var boundingBoxesCollided = true;
             if(objA.physics.shape !== "rect" || objB.physics.shape !== "rect")
             {
-                boundingBoxesCollided = observer.boundingBoxesColliding(
-                objA.physics.boundingBox, objB.physics.boundingBox).colliding;
+                boundingBoxesCollided = observer.boundingBoxesColliding(objA.physics.boundingBox, objB.physics.boundingBox).colliding;
             }
             if(boundingBoxesCollided)
             {
@@ -1617,8 +1615,7 @@ gameObjects.applyCollision = function(objA, physicsInfo)
                         }
                         if(collided)
                         {
-                            observer.applyCollision(objA, objB, physicsInfo, 
-                            collisionInfo);
+                            observer.applyCollision(objA, objB, physicsInfo, collisionInfo);
                         }
                     }
                 }
@@ -3720,7 +3717,7 @@ var RedBeakerBoss = function(config)
     this.type = "lifeform";
     
     this.maxHeight = this.height;
-    this.maxHp = config.maxHp || 100;
+    this.maxHp = config.maxHp || 200;
     this.hp = this.maxHp;
     
     this.sounds = {
@@ -4418,7 +4415,7 @@ var levels = {
             "bbb#3#333#bl D S  Rbl        Db",
             "bbbbbbbbbbbbbbbbl   Rbbbbbbbbbb",
             "bbb  a k       Rbl       K  K b",
-            "bbbl D    k     Rbbbbl       b",
+            "bbbl D    k     Rbbbbl        b",
             "bbbbbbblk        Rbbbbbwwwwwwwb",
             "bL     Rbl         bbbbPPbPPbPb",
             "b       bbwW W W W bbbb       b",
@@ -4484,6 +4481,14 @@ var levels = {
                 defeated : false,
             },
         },
+        act : function()
+        {
+            if(gameObjects.getArray("redBeakerBoss").length >= 1)
+            {
+                var boss = gameObjects.getArray("redBeakerBoss")[0];
+                screenUtils.bossBar.draw(boss.hp, boss.maxHp);
+            }
+        },
         plan : [
             "          ",
             "          ",
@@ -4512,7 +4517,7 @@ var levels = {
         },
         signs : {
             'a' : {
-                message : "Take this the Power of Beakerz!"
+                message : "Take this the Power of Beakers!"
             },
             'b' : {
                 message : "You have gained power!"
@@ -4522,11 +4527,11 @@ var levels = {
             'a' : {
                 name : "power",
                 amt : 25,
-                collected : false,  
+                collected : false, 
             },
         },
         plan : [
-            "            a      ###   hchc       ",
+            "            a       #    hchc       ",
             "a      a    *   b   #    chch      b",
             "D      S        S   #    hchc      D",
             "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
@@ -4544,7 +4549,7 @@ var levels = {
                 door : 'b'
             },
             'c' : {
-    targetDoor : true,
+                targetDoor : true,
                 level : "Treasure?",
                 door : 'a'
             },
@@ -4711,7 +4716,7 @@ var levels = {
                 door : 'b',
             },
             'b' : {
-    targetDoor : true,
+                targetDoor : true,
                 level : "Underground_Parkour_#3",
                 door : 'a',
             },
@@ -5798,7 +5803,7 @@ draw = function()
     if(!loader.gameLoaded)
     {
         setup();
-    }
+    }    
     
     game[game.gameState]();
 };
