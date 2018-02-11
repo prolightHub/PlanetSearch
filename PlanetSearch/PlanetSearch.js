@@ -1,4 +1,4 @@
- var canvas = document.getElementById("canvas");
+var canvas = document.getElementById("canvas");
     var processing = new Processing(canvas, function(processing) {
         processing.size(400, 400);
         processing.background(0xFFF);
@@ -54,7 +54,7 @@
 var game = {
     gameState : "menu",
     sound : "off",
-    debugMode : false,
+    debugMode : false, // Turning this on would be cheating!
     fps : 45,
 }; 
 var fader = {
@@ -77,6 +77,8 @@ var levelInfo = {
     width : width,
     height : height,
 };
+levelInfo.firstLevel = levelInfo.level;
+levelInfo.firstDoor = levelInfo.door;
 var loader = {};
 
 var keys = [];
@@ -96,33 +98,12 @@ var controls = {
     },
     nextLevel : function()
     {
-  return keys[78];
+        return keys[78];
     },
     pause : function()
     {
         return keys[80];  
     },
-};
-
-var Bar = function(x, y, w, h, c)
-{
-    this.x = x;
-    this.y = y;
-    this.w = w;
-    this.h = h;
-    this.c = c;
-    
-    this.draw = function(amt, max) 
-    {
-        fill(this.c);
-        rect(this.x, this.y, (this.w * amt) / max, this.h);
-        noFill();
-        strokeWeight(1);
-        stroke(0, 0, 0, 50);
-        rect(this.x, this.y, this.w, this.h);
-        noStroke();
-    };
-    
 };
 
 var Camera = function(xPos, yPos, Width, Height)
@@ -729,7 +710,7 @@ var observer = {
                         if(!sidesOfFixedObjBool.top)
                         {
                             sideBoundariesBool.bottom = (
-                            fixedObj.yPos - abs(mobileObj.yVel) <= mobileObj.yPos -                                 mobileObj.height);
+                            fixedObj.yPos - abs(mobileObj.yVel) <= mobileObj.yPos - mobileObj.height);
                         }
                     }
                     
@@ -976,6 +957,30 @@ buttons.getButton = function(name)
     }  
 };
 
+var Bar = function(x, y, w, h, c)
+{
+    this.x = x;
+    this.y = y;
+    this.w = w;
+    this.h = h;
+    this.c = c;
+    
+    this.draw = function(amt, max) 
+    {
+        fill(this.c);
+        rect(this.x, this.y, (this.w * amt) / max, this.h);
+        noFill();
+        if(!this.noStroke) 
+        { 
+            strokeWeight(1);
+            stroke(0, 0, 0, 50); 
+        }
+        rect(this.x, this.y, this.w, this.h);
+        noStroke();
+    };
+    
+};
+
 var soundUser = {
     lastPlayedSound : "",
 };
@@ -998,8 +1003,11 @@ var screenUtils = {
     timer : 0,
     stopped : false,
 }; 
+screenUtils.levelProgressBar = new Bar(0, 395, width, 5, color(0, 0, 0, 50));//color(32, 104, 168, 100));
+screenUtils.levelProgressBar.noStroke = true;
 screenUtils.shakeScreen = function(intensity, time)
 {
+    this.stopped = false;
     if(this.timer < time && !this.stopped)
     {
         this.lastXPos = random(-intensity, intensity);
@@ -1031,10 +1039,9 @@ screenUtils.drawToImage = function(obj)
     obj.images.push(get(0, 0, obj.width, obj.height));
     obj.draw = function()
     {  
-  image(this.images[obj.imageIndex], this.xPos, this.yPos, this.width, this.height);
+        image(this.images[obj.imageIndex], this.xPos, this.yPos, this.width, this.height);
     };
 };
-
 
 var Particle = function(x, y, d, c)
 {
@@ -1079,9 +1086,9 @@ particles.create = function(x, y, amt, radius, color, velocityPV, lifeTime)
     for(var i = 0; i < amt; i++)
     {
         var particle = new Particle(
-            x + random(-radius, radius), 
-            y + random(-radius, radius), 
-            5, color);
+        x + random(-radius, radius), 
+        y + random(-radius, radius), 
+        5, color);
         particle.lifeTime = i; 
         if(velocityPV !== undefined)
         {
@@ -1184,7 +1191,6 @@ clouds.generate = function(amt)
             height : random(15, 35),
             width : random(50, 150),
             color : color(255, 255, 255, random(100, 200)),
-            
             xSpeed : random(-4, 4) / 8,
         });
     }
@@ -1864,8 +1870,84 @@ var Block = function(config)
         triangle(this.xPos, this.yPos + this.height, this.xPos + this.width, this.yPos, this.xPos, this.yPos);
     };
 };
-
 gameObjects.addArray("block", createArray(Block));
+
+var Tread = function(config)
+{
+    Block.call(this, config); 
+    this.color = config.color || color(40, 20, 125, 200);
+    this.physics.usesOnTouch = true;
+    
+    this.onVel = config.onVel || 0.2;
+    this.dir = config.dir || 1;
+    this.onVel = this.dir * abs(this.onVel);
+    
+    this.drawTri = function(xPos, yPos)
+    {
+        var comXPos = this.xPos + xPos;
+        var comYPos = this.yPos + yPos;
+        var leftXPos = comXPos + this.width / 3;
+        var middleYPos = comYPos + this.height / 6;
+        var downYPos = comYPos + this.height / 3;
+        if(this.dir > 0)
+        {
+            triangle(comXPos, comYPos, comXPos, downYPos, leftXPos, middleYPos);
+        }
+        else if(this.dir < 0)
+        {
+            
+            triangle(leftXPos, comYPos, leftXPos, downYPos, comXPos, middleYPos);
+        }
+    };
+    
+    this.draw = function()
+    {
+        noStroke();
+        fill(this.color);
+        rect(this.xPos, this.yPos, this.width, this.height);
+        fill(this.color, this.color, this.color, 30);
+        triangle(this.xPos, this.yPos + this.height, this.xPos + this.width, this.yPos, this.xPos, this.yPos);
+        
+        fill(0, 120, 20);
+        for(var i = 0; i < 3; i++)
+        {
+            this.drawTri(this.width / 3 * i, this.height / 3);
+        }
+    };
+    
+    this.onTouch = function(object)
+    {
+        if(object.type === "lifeform")
+        {
+             object.xVel += object.maxXVel * this.onVel; 
+        }
+    };
+};
+gameObjects.addArray("tread", createArray(Tread));
+
+var VoidSupport = function(config)
+{
+    Block.call(this, config);
+    this.color = config.color || color(0, 0, 180, 200);
+    
+    this.physics.boundingBox = {
+        xPos : this.xPos,
+        yPos : 0,
+        width : this.width,
+        height : levelInfo.height,
+    };
+    
+    this.draw = function()
+    {
+        fill(this.color);
+        rect(this.xPos, this.yPos, this.width, this.height);
+        fill(10, 150, 0, 200);
+        ellipse(this.xPos + this.width / 2, this.yPos + this.height / 2, this.height * 0.7, this.width * 0.7);
+        fill(0, 0, 200, 55);
+        rect(this.xPos + this.width * 0.25, 0, this.width / 2, levelInfo.height + height);
+    };
+};
+gameObjects.addArray("voidSupport", createArray(VoidSupport));
 
 var InvisibleBlock = function(config)
 {
@@ -2231,7 +2313,7 @@ var Circle = function(config)
     this.radius = this.diameter/2;
     
     /*Important Note : 
-        Do not use these near blocks.
+        Do not use these near blocks. (Fixed in new Game Engine) 
     */
     
     this.type = "collision";
@@ -2444,6 +2526,10 @@ var FallBlock = function(config)
             this.timer = this.time;
             this.activated = false;
         }
+        if(this.timer <= 0)
+        {
+            this.activated = true;  
+        }
         if(this.activated)
         {
             this.yPos += this.fallSpeed;    
@@ -2455,10 +2541,6 @@ var FallBlock = function(config)
         if(obj.physics.movement === "mobile")
         {
             this.timer--;
-        }
-        if(this.timer <= 0)
-        {
-            this.activated = true;    
         }
     };
 };
@@ -2604,27 +2686,27 @@ var Lava = function(config)
 
     this.loadDetail = function(cols, rows, width, height, unitWidth, unitHeight)
     {
-  this.grids = [];
-  this.cols = cols || floor(width / unitWidth);
+        this.grids = [];
+        this.cols = cols || floor(width / unitWidth);
         this.rows = rows || floor(height / unitHeight);
-      this.grids.unitWidth = unitWidth || floor(width / this.cols);
-      this.grids.unitHeight = unitHeight || floor(height / this.rows);
-  for(var i = 0; i < this.imagesAmount; i++)
-  {
+        this.grids.unitWidth = unitWidth || floor(width / this.cols);
+        this.grids.unitHeight = unitHeight || floor(height / this.rows);
+        for(var i = 0; i < this.imagesAmount; i++)
+        {
              var grid = [];
-           grid.unitWidth = unitWidth || floor(width / this.cols);
-           grid.unitHeight = unitHeight || floor(height / this.rows);
-       for(var col = 0; col < this.cols; col++)
-       {
-          var arr = [];
-           for(var row = 0; row < this.rows; row++)
-           {
-               arr.push(color(255 - random(-15, 100) * 3, random(0, 50), random(0, 50), random(75, 125)));
-           }
-           grid.push(arr);
-             }
-       this.grids.push(grid);
-  }
+             grid.unitWidth = unitWidth || floor(width / this.cols);
+             grid.unitHeight = unitHeight || floor(height / this.rows);
+             for(var col = 0; col < this.cols; col++)
+             {
+                 var arr = [];
+                 for(var row = 0; row < this.rows; row++)
+                 {
+                     arr.push(color(255 - random(-15, 100) * 3, random(0, 50), random(0, 50), random(75, 125)));
+                 }
+                 grid.push(arr);
+            }
+            this.grids.push(grid);
+        }
     };
     this.loadDetail(config.cols || 3, config.rows || 3, this.width, this.height);
     this.loadDraw = function()
@@ -2656,7 +2738,7 @@ var Lava = function(config)
    
     this.draw = function() 
     {
-  image((this.useStoredImages) ? lavaImages[this.imageIndex] : this.images[this.imageIndex], this.xPos, this.yPos, this.width, this.height);
+        image((this.useStoredImages) ? lavaImages[this.imageIndex] : this.images[this.imageIndex], this.xPos, this.yPos, this.width, this.height);
     };
     
     if(!this.useStoredImages) 
@@ -2690,48 +2772,6 @@ var Lava = function(config)
     };
 };
 gameObjects.addArray("lava", createArray(Lava));
-var LavaPillar = function(config)
-{
-    Lava.call(this, config);
-    this.color = config.color || color(140, 30, 40);
-    this.normalHeight = this.height;
-    this.normalYPos = this.yPos;
-    this.minYPos = this.yPos - this.height * 1;
-   
-    this.speed = random(0.5, 0.1);
-    this.vel = this.speed;
-    this.dir = 1;
-    this.maxVel = 3;
-
-    this.loadDetail(undefined, undefined, this.width, this.height * 3, this.width / 2, this.height / 2);
-    this.loadDraw();
-
-    this.update = function()
-    {
-  if(this.yPos < this.minYPos)
-  {
-      this.dir = 1;
-  }
-  if(this.yPos > this.normalYPos)
-  {
-      this.dir = -1;
-      this.speed = random(0.5, 0.1);
-  }
-  if(this.dir === 1)
-  {
-      this.vel += this.speed;
-  }
-  if(this.dir === -1)
-  {
-      this.vel -= this.speed;
-  }
-  this.vel = constrain(this.vel, -this.maxVel, this.maxVel);
-  this.yPos += this.vel;
-  this.YPos = constrain(this.yPos, this.normalYPos, this.minYPos);
-  this.height = this.normalYPos - this.yPos + this.normalHeight;
-    };
-};
-gameObjects.addArray("LavaPillar", createArray(LavaPillar));
 
 var SpikeBlock = function(config)
 {
@@ -2831,18 +2871,17 @@ var MovingLava = function(config)
     
     this.onCollide = function(obj)
     { 
-        
         if(obj.name === "beaker")
         {
-      if(this.inLiquid)
+            if(this.inLiquid)
             {
-    return;
+                return;
             }else{
-    obj.hp -= this.damage;
+                obj.hp -= this.damage;
             }
         }
 
-  this.lastOnCollide(obj);
+        this.lastOnCollide(obj);
         if(obj.type === "lifeform")
         {
             if(obj.name !== "beaker2" && obj.name !== "beaker")
@@ -3146,6 +3185,49 @@ var QuestionMarkBlock = function(config)
 };
 gameObjects.addArray("questionMarkBlock", createArray(QuestionMarkBlock));
 
+var LavaPillar = function(config)
+{
+    Lava.call(this, config);
+    this.color = config.color || color(140, 30, 40);
+    this.normalHeight = this.height;
+    this.normalYPos = this.yPos;
+    this.minYPos = this.yPos - this.height * 1;
+   
+    this.speed = random(0.5, 0.1);
+    this.vel = this.speed;
+    this.dir = 1;
+    this.maxVel = 3;
+
+    this.loadDetail(undefined, undefined, this.width, this.height * 3, this.width / 2, this.height / 2);
+    this.loadDraw();
+
+    this.update = function()
+    {
+        if(this.yPos < this.minYPos)
+        {
+            this.dir = 1;
+        }
+        if(this.yPos > this.normalYPos)
+        {
+            this.dir = -1;
+            this.speed = random(0.5, 0.1);
+        }
+        if(this.dir === 1)
+        {
+            this.vel += this.speed;
+        }
+        if(this.dir === -1)
+        {
+            this.vel -= this.speed;
+        }
+        this.vel = constrain(this.vel, -this.maxVel, this.maxVel);
+        this.yPos += this.vel;
+        this.YPos = constrain(this.yPos, this.normalYPos, this.minYPos);
+        this.height = this.normalYPos - this.yPos + this.normalHeight;
+    };
+};
+gameObjects.addArray("lavaPillar", createArray(LavaPillar));
+
 var Coin = function(config)
 {
     GameObject.call(this, config); 
@@ -3182,9 +3264,9 @@ var Coin = function(config)
     
     this.update = function()
     {
-  if(config.outOfQuestionMarkBlock)
+        if(config.outOfQuestionMarkBlock)
         {
-      this.onCollide(gameObjects.getArray("player")[0]);
+            this.onCollide(gameObjects.getArray("player")[0]);
         } 
     };
 
@@ -3497,16 +3579,16 @@ var Beaker = function(config)
     this.onCollide = function(obj)
     {
         var next = false;
-  if(this.inLiquid && (obj.name === "movingLava" || obj.name === "lava"))
+        if(this.inLiquid && (obj.name === "movingLava" || obj.name === "lava"))
         {
             return this.hitWall(obj);
         }
         this.inLiquid = false;
-  if(obj.type === "item")
+        if(obj.type === "item")
         {
-     return false;
+           return false;
         }
-  if(obj.blendsIn || obj.beakerImmune)
+        if(obj.blendsIn || obj.beakerImmune)
         {
             return false;   
         }
@@ -3773,8 +3855,6 @@ var RedBeakerBoss = function(config)
     this.remove = config.remove;
     
     this.myHandleEdges = Beaker2.prototype.myHandleEdges;
-    
-    this.sound 
 
     this.onCollide = function(obj)
     {
@@ -4036,26 +4116,26 @@ var Player = function(config)
             }
         }
 
-  //Disabled crouch effect causes extreme amount of physics glitches
-  /*if(this.controls.down())
-  {
-      if(this.height !== this.crouchHeight)
-      {
-    this.yPos += this.crouchHeight;
-          this.height = this.crouchHeight;
-      }
-      this.crouching = true;
-  }else{
-      this.height = this.normalHeight;  
-      if(this.crouching)
-      {
-    if(!this.inAir)
-    {
-        this.xVel = 0;
-    }
-    this.crouching = false;
-      }
-  }*/
+        //Disabled crouch effect causes extreme amount of physics glitches
+        /*if(this.controls.down())
+        {
+            if(this.height !== this.crouchHeight)
+            {
+          this.yPos += this.crouchHeight;
+                this.height = this.crouchHeight;
+            }
+            this.crouching = true;
+        }else{
+            this.height = this.normalHeight;  
+            if(this.crouching)
+            {
+          if(!this.inAir)
+          {
+              this.xVel = 0;
+          }
+          this.crouching = false;
+            }
+        }*/
     };
     
     this.draw = function() 
@@ -4129,7 +4209,7 @@ var levels = {
             "                   ",
             "                   ",
             "  a                ",
-            "  D                ",
+            "  D |||///         ",
             "ggggggggggggggggggg",
         ],
     },
@@ -4141,7 +4221,7 @@ var levels = {
                 door : 'a',
             },
             'd' : {
-    targetDoor : true,
+                targetDoor : true,
                 level : "Cave",
                 door : 'a',
             },
@@ -4200,7 +4280,7 @@ var levels = {
                 door : 'd'
             },
             'b' : {
-    targetDoor : true,
+                targetDoor : true,
                 level : "Circlade_Parkour",
                 door : 'b'
             },
@@ -4223,7 +4303,7 @@ var levels = {
         background : "ice",
         doors : {
             'a' : {
-    targetDoor : true,
+                targetDoor : true,
                 level : "Dogde_Tower",
                 door : 'a',
             },
@@ -4261,7 +4341,7 @@ var levels = {
                 door : 'a',
             },
             'b' : {
-    targetDoor : true,
+                targetDoor : true,
                 level : "Dangerous_Slopes",
                 door : 'a',
             },
@@ -4311,7 +4391,7 @@ var levels = {
                 door : 'b',
             },
             'b' : {
-    targetDoor : true,
+                targetDoor : true,
                 level : "Tricky_Ways",
                 door : 'a',
             },
@@ -4357,7 +4437,7 @@ var levels = {
                 door : 'b',
             },
             'b' : {
-    targetDoor : true,
+                targetDoor : true,
                 level : "Boss_Room",
                 door : 'a',
             },
@@ -4415,7 +4495,7 @@ var levels = {
             "a   a    b",
             "D   $    D",
             "gggggggggg",
-      "dddYdddYdd",
+            "dddYdddYdd",
         ],
     },
     "Rewards!" : {
@@ -4540,7 +4620,7 @@ var levels = {
                 door : 'a',
             },
             'b' : {
-    targetDoor : true,
+                  targetDoor : true,
                 level : "Treasure?",
                 door : 'd'
             },
@@ -4548,7 +4628,7 @@ var levels = {
         signs : {
             'a' : {
                 message : "Thanks for dropping in!",
-     textColor : color(240, 245, 245)
+                 textColor : color(240, 245, 245)
             },
             'b' : {
                 message : "Looks like you dropped out.",
@@ -4588,7 +4668,7 @@ var levels = {
                 door : 'b',
             },
             'b' : {
-    targetDoor : true,
+                targetDoor : true,
                 level : "Underground_Parkour_#2",
                 door : 'a',
             },
@@ -4662,7 +4742,7 @@ var levels = {
                door : 'b',
             },
             'b' : {
-    targetDoor : true,
+                targetDoor : true,
                 level : "Breaking_Ice",
                 door : 'a',
             },
@@ -4714,7 +4794,7 @@ var levels = {
                 door : 'b'
             },
             'b' : {
-    targetDoor : true,
+                targetDoor : true,
                 level : "A_Dangerous_Drop",
                 door : 'a'
             },
@@ -4766,14 +4846,15 @@ var levels = {
         ]
     },
     "A_Dangerous_Drop" : {
+        background : "ice",
         doors : {
             'a' : {
                 level : "Breaking_Ice",
                 door : 'b'
             },
             'b' : {
-    targetDoor : true,
-                level : "Finish",
+                targetDoor : true,
+                level : "Super_Dash",
                 door : 'a',
             },
             'c' : {
@@ -4832,17 +4913,122 @@ var levels = {
             "bbbbbbbbbbb",
         ],
     },
-    "Finish" : {
-        background : "lava",
+    "Super_Dash" : {
+        background : "ice",
         doors : {
             'a' : {
                 level : "A_Dangerous_Drop",
-                door : 'b'
+                door : 'b',
+            },
+            'b' : {
+                level : "Dimension_Bridge",
+                door : 'a',
+            },
+            'c' : {
+                level : "Super_Dash",
+                door : 'c',
+            },
+            'e' : {
+                level : "Super_Dash",
+                door : 'e',
+            },        
+      },
+      signs : {
+            'a' : {
+                message : "Hello, welcome to the Super Dash\n there will be a series of obstacles.",
+            },
+            'b' : {
+                message : "Press x / k", 
+            }
+        },
+        powers : {
+            'a' : {
+                name : "iceBreaker",
+                collected : false,
+            },
+        },
+        plan : [  
+            "            rbbbbbbbbbbl         b                               bPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP",
+            "           rL   c    wWRl        bl                              b                                                           ",
+            "          rL    Dr///w  bbbl     bbbbbbbbbbbbbbbbl               b                                                           ",
+            "          <#   PPPL Rqqwwqqbl   rbhcche          >           b   b                                                           ",
+            "          <#    bL   RbwwwqwqbbbbbhcchD          >           S   b                h                                          ",
+            "          b#    b     RbwqqwwqqbbbbbbbbPPP///////L   bb      biiib                                                           ",
+            "          Rb||| b      RYbbwwqqqbL        b                  biii                                                          bb",
+            "a a a      Rbbb b       Rbb/bbvvL         b                  biii            E               X                             bb",
+            "D S * riO       b          RYbl   r//////sb                  biiibbbb      bbbbb     b   bb       X    b dd  b  b          Db",
+            "bbbbbbbbYYbb///sb           Rbb///L     RbL                  bbbbL                                                      bbbbL",
+            "biiiiiiiiiiiiiibb                                                                                                            ",
+        ],  
+    },
+    "Dimension_Bridge" : {
+        background : "underground",
+        doors : {
+            'a' : {
+                level : 'Super_Dash',
+                door : 'b',
+            },
+            'b' : {
+                level : "Finish",
+                door : 'a',
             }
         },
         signs : {
             'a' : {
-                message : "You beat Planet Search made by Prolight!"
+                 textColor : color(255, 255, 255),
+                 message : "Welcome to the longest bridge - The Dimension Bridge!",
+            },
+            'b' : {
+                 textColor : color(255, 255, 255),
+                 message : "It's task was to stretch between Dimensions,\n from one of danger to one of safety. Some people call it a cave,\n I call it the dark because it's the void in between dimensions!",
+            },
+            'c' : {
+                 textColor : color(255, 255, 255),
+                 message : "This is the final stretch. Remember that you're leaving\n Planet Search a fallen world. The bridge is still some what\n experimental So take caution and good luck!",
+            }
+        },
+        act : function()
+        {  
+            if(random(0, 100) <= 2)
+            {
+                screenUtils.shakeScreen(5, random(3, 5));
+            }
+        },
+        plan : [
+            "                                                                                                                                                     ",
+            "                                                                                                                                                     ",
+            "                                                                                                                                                     ",
+            "                                                                                                                                                     ",
+            "                                                                                                                                                     ",
+            "                                                                                                                                                     ",
+            "                                                                                                                                                     ",
+            "                                                                                                                                                     ",
+            "                                                                                                                                                     ",
+            "                                                                                                                                                     ",
+            "                                                                                                                                                     ",
+            "                                                                                                                                                     ",
+            "                                                     rbl        rbl                                    rbl        rbl                                ",
+            "                                                                                                                                                     ",
+            "                                                                                                                                                   bb",
+            "a   a      b     c                                                                                                                                 bd",
+            "D   S      S     S                                rbbbzbbbl  rbbbzbbbl                              rbbbzbbbl  rbbbzbbbl                           Dd",
+            "gggbbbbbbbbbbbbbbbbbbP^^^^^^^P^^^^^Pbbbl   rbbbfbbbbL   RbbbbbbL   RbbbbbbbbP^^^^^^Pl   rP^^^^PbbbbbbbL   RbbbbbbL   RbbbffbbP^^^^P^^^^^Pbbffbbbbbbbb",
+            "ddddL                f             f   RfffL          b          b          f       RfffL     f         b          b         f          f       Rbbbb",
+            "dddL                 P             P                                        P                 P                              P          P        Rbbb",
+        ],
+    },
+    "Finish" : {
+        background : "underground",
+        doors : {
+            'a' : {
+                level : "Dimension_Bridge",
+                door : 'b',
+            }
+        },
+        signs : {
+            'a' : {
+                textColor : color(255, 255, 255),
+                message : "You escaped Planet Search made by Prolight!"
             },
         },
         plan : [
@@ -4876,6 +5062,7 @@ levels.build = function(plan)
     levelInfo.height = plan.unitHeight * level.plan.length;
     
     backgrounds.background = level.background || backgrounds.background;
+    level.act = level.act || function() {};
     
     var addCollect = function(dest, config)
     {
@@ -5179,21 +5366,21 @@ levels.build = function(plan)
                         levels.getSymbol(col + 1, row, level.plan) === 'E' && 
                         levels.getSymbol(col + 1, row + 1, level.plan) === 'E')
                         {
-          gameObjects.addObject("beaker2", config);
+                            gameObjects.addObject("beaker2", config);
                             config.xSpeed *= 2;
                             config.hp *= 4;
                             config.width *= 2;
                             config.height *= 2;  
-          gameObjects.addObject("beaker2", config);
+                            gameObjects.addObject("beaker2", config);
                         }
-            else if(seperateBeakers('E'))
+                        else if(seperateBeakers('E'))
                         {
-          gameObjects.addObject("beaker2", config);
+                           gameObjects.addObject("beaker2", config);
                         }
         
                     break; 
                  
-                case "$" : 
+                case '$' : 
                         var symbol = levels.getSymbol(col - 1, row, level.plan);
                         var dest = level.bosses[symbol];
                         if(!dest.defeated)
@@ -5232,16 +5419,30 @@ levels.build = function(plan)
                         config.locked = dest.locked;
                         config.symbol = symbol;
                         config.level = dest.level;
-      config.targetDoor = dest.targetDoor;
+                        config.targetDoor = dest.targetDoor;
                         config.door = dest.door;
                         config.yPos -= config.height;
                         config.height *= 2;
                         gameObjects.addObject("door", config);  
                     break;
 
-    case 'Y' :
-                  gameObjects.addObject("LavaPillar", config);
-        break;
+                case 'Y' :
+                      gameObjects.addObject("lavaPillar", config);
+                  break;
+                
+                case 'z' : 
+                      gameObjects.addObject("voidSupport", config);
+                  break;
+                  
+                case '/' :
+                      config.dir = 1;
+                      gameObjects.addObject("tread", config);
+                  break;
+                  
+               case '|' : 
+                      config.dir = -1;
+                      gameObjects.addObject("tread", config);
+                  break;
             }
         }
     }
@@ -5253,7 +5454,6 @@ infoBar.draw = function()
     noStroke();
     fill(0, 0, 0, 50);
     rect(0, 0, width, 20);
-    
     textSize(12.5);
     var player = gameObjects.getArray("player")[0];
     hpBar.draw(player.hp, player.maxHp);
@@ -5264,6 +5464,7 @@ infoBar.draw = function()
     text("Score : " + (this.score + player.score), 160, 14);
     text("Level : " + levelInfo.level, 245, 14);
     textAlign(NORMAL, NORMAL);
+    screenUtils.levelProgressBar.draw(player.xPos + player.width / 2, levelInfo.width - player.width / 2);
 };
 
 var fade = function()
@@ -5271,7 +5472,6 @@ var fade = function()
     noStroke();
     fill(0, 0, 0, fader.amt * 255 / fader.max);
     rect(0, 0, width, height);
-    
     if(fader.amt >= fader.max)
     {
         fader.vel = -fader.Vel; 
@@ -5282,7 +5482,7 @@ var debugTools = function()
 {
     if(!game.debugMode)
     {
-  return;
+        return;
     }
     var player = gameObjects.getArray("player")[0];
     if(mouseIsPressed && mouseButton === RIGHT)
@@ -5304,7 +5504,6 @@ loader.startLevelLoading = function(config)
     infoBar.hp = gameObjects.getArray("player")[0].hp;
     infoBar.maxHp = gameObjects.getArray("player")[0].maxHp;
     this.config = config;
-    this.config.level = this.config.level;
     this.loaded = false;
     game.img = get(0, 0, width, height);
 };
@@ -5338,7 +5537,7 @@ loader.loadGame = function()
 var mainLoop = function()
 {
     backgrounds.draw();
-    //screenUtils.shakeScreen(10, 10);
+    levels[levelInfo.level].act();
     pushMatrix();
         cam.view(gameObjects.getArray("player")[0]);
         gameObjects.apply();
@@ -5352,7 +5551,7 @@ var mainLoop = function()
 
 game.options = function()
 {
-    if(controls.restartLevel())
+    if(this.gameState === "play" && controls.restartLevel())
     {
         loader.startLevelLoading(levelInfo); 
     }
@@ -5376,7 +5575,7 @@ game.pause = function()
     fill(0, 0, 0, 50);
     rect(50, 0, width - 100, height);
     textSize(40);
-    fill(0, 0, 0, 50);
+    fill(11, 68, 153, 100);
     textAlign(CENTER, CENTER);
     text("Paused", 200, 100);
     buttons.draw();
@@ -5389,13 +5588,14 @@ game.pause = function()
         else if(buttons.getButton("restart").IsMouseInside())
         {
             this.gameState = "play";
-            loader.startLevelLoading(levelInfo);
+            loader.startLevelLoading(levelInfo); 
         }
         else if(buttons.getButton("menu").IsMouseInside())
         {
             this.gameState = "menu";
             this.menu.setup();
         }
+        mouseIsPressed = false;
     }
 };  
 game.pause.setup = function()
@@ -5408,7 +5608,7 @@ game.pause.setup = function()
         height : 30,
         message : "Continue",
         name : "continue",
-        color : color(10, 10, 10, 50)
+        color : color(11, 68, 153, 100)//color(10, 10, 10, 50)
     });
     buttons.add({
         xPos : 150,
@@ -5417,7 +5617,7 @@ game.pause.setup = function()
         height : 30,
         message : "Restart",
         name : "restart",
-        color : color(10, 10, 10, 50)
+        color : color(11, 68, 153, 100)
     });
     buttons.add({
         xPos : 150,
@@ -5426,7 +5626,7 @@ game.pause.setup = function()
         height : 30,
         message : "Menu",
         name : "menu",
-        color : color(10, 10, 10, 50)
+        color : color(11, 68, 153, 100)
     });  
 };
 game.menu = function()
@@ -5442,7 +5642,12 @@ game.menu = function()
     if(mouseIsPressed)
     {
         switch(true)
-        {
+        {     
+            case buttons.getButton("newGame").IsMouseInside() : 
+                    levelInfo.level = levelInfo.firstLevel;
+                    levelInfo.door = levelInfo.firstDoor;
+                    loader.startLevelLoading(levelInfo); 
+                  break;
             case buttons.getButton("play").IsMouseInside() : 
                     this.gameState = "play";
                 break;
@@ -5450,6 +5655,7 @@ game.menu = function()
                     this.gameState = "howTo";
                     this.howTo.setup();
                 break;
+            
             /*case buttons.getButton("levelMaker").IsMouseInside() :
                     this.gameState = "levelMaker";
                     this.levelMaker.setup();
@@ -5462,21 +5668,30 @@ game.menu.setup = function()
     buttons.clear();
     buttons.add({
         xPos : 150,
-        yPos : 190,
+        yPos : 180,
         width : 110,
         height : 30,
         message : "Play",
         name : "play",
-
+        color : color(11, 68, 153, 100),
     });
     buttons.add({
         xPos : 150,
-        yPos : 230,
+        yPos : 220,
+        width : 110,
+        height : 30,
+        message : "New Game",
+        name : "newGame",
+        color : color(11, 68, 153, 100),
+    });
+    buttons.add({
+        xPos : 150,
+        yPos : 260,
         width : 110,
         height : 30,
         message : "How To",
         name : "howTo",
-
+        color : color(11, 68, 153, 100),
     });
     /*buttons.add({
         xPos : 150,
@@ -5485,7 +5700,7 @@ game.menu.setup = function()
         height : 30,
         message : "Level Maker",
         name : "levelMaker",
-
+        color : color(11, 68, 153, 100),
     });*/
 };
 game.howTo = function()
@@ -5567,7 +5782,6 @@ game.levelMaker.setup = function()
 };
 game.play = mainLoop;
 
-
 var setup = function()
 {
     frameRate(30);
@@ -5591,7 +5805,6 @@ draw = function()
     }
     
     game[game.gameState]();
-
 };
 
 var lastKeyPressed = keyPressed;
@@ -5599,9 +5812,9 @@ keyPressed = function()
 {
     lastKeyPressed();
     game.options();
-    if(game.debugMode && controls.nextLevel())
+    if(game.gameState === "play" && game.debugMode && controls.nextLevel())
     {
-  loader.startLevelLoading(gameObjects.getArray("door").targetDoor);
+        loader.startLevelLoading(gameObjects.getArray("door").targetDoor);
     }
 };
       }
