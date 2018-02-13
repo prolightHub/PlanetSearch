@@ -43,19 +43,33 @@ var canvas = document.getElementById("canvas");
  *         ▐         ▐   ▐  |  \    ▀      ▓   ▓
  *         ▐▬▬▬▬▬▬▬  ▐   ▐  |   \    ▀▀▀   ▓   ▓
  *
- * //Made By Prolight, this game is the original and is my BEST game so far! This is my first game with advanced collision math implemented. I still haven't thought of a storyline yet, and it needs more levels. Hope you enjoy!
- * //Debugged 1/27/2018
- * //Note : I used to be nitrobyte
+ * Made By ProlightHub + on GitHub, this game is the original though I have had other accounts with it (Evan Sweet, Prolight, Nitrobyte)
+ * There are lots of new levels. New Things since the oldest version.
+ * I Hope you enjoy.
+ * New Levels!
  * 
- * More levels coming soon!
+ * NEW Things added :
  * 
+ * +New levels,
+ * +New GameObjects,
+ *    +Lava towers (old),
+ *    +Treads
+ *    +Ice Breaker ablity updated.
+ * +Fps Stablizer.
+ * +Options Menu.
+ * +Boss and Level bars!
+ * +Harder boss(es)
+ * Ice Boss Coming soon
 **/
 
 var game = {
     gameState : "menu",
     sound : "off",
     debugMode : false, // Turning this on would be cheating!
-    fps : 45,
+    maxFps : 60,
+    setFps : 60,
+    fps : 60,
+    fixedFps : false,
 }; 
 var fader = {
     amt : 0,
@@ -104,6 +118,46 @@ var controls = {
     {
         return keys[80];  
     },
+};
+var fpsStabilizer = {
+    countedFrames : game.maxFps,
+    lastCountedFrames : game.maxFps,
+    lastSecond : second(),
+    window : 10,
+    speed : 1,
+    count : function()
+    {
+        if(second() !== this.lastSecond)
+        {
+            if(!game.fixedFps)
+            {
+                if(game.fps >= this.lastCountedFrames)
+                {
+                    game.fps += this.speed;   
+                }
+                else if(game.fps < this.lastCountedFrames)
+                {
+                    game.fps -= this.speed;
+                }
+                else if(this.countedFrames !== this.lastCountedFrames) //If the framerate isn't consistent set it!
+                {
+                    game.fps = this.countedFrames;  
+                }   
+                game.fps = constrain(game.fps, this.countedFrames - this.window, this.countedFrames + this.window);
+            }
+            
+            this.lastCountedFrames = this.countedFrames;
+            this.countedFrames = 0;  
+        }
+        game.fps = constrain(game.fps, 1, game.maxFps);
+        this.lastSecond = second();
+        this.countedFrames++;
+        
+        if(game.fixedFps)
+        {
+            game.fps = game.setFps;
+        }
+    }
 };
 
 var Camera = function(xPos, yPos, Width, Height)
@@ -965,10 +1019,16 @@ var Bar = function(x, y, w, h, c)
     this.h = h;
     this.c = c;
     
+    this.input = 0;
+    this.set = function(amt, max)
+    {
+        this.input = (this.w * amt) / max;
+    };
+    
     this.draw = function(amt, max) 
     {
         fill(this.c);
-        rect(this.x, this.y, (this.w * amt) / max, this.h);
+        rect(this.x, this.y, (amt !== undefined) ? ((this.w * amt) / max) : this.input, this.h);
         noFill();
         if(!this.noStroke) 
         { 
@@ -1007,6 +1067,14 @@ screenUtils.levelProgressBar = new Bar(0, 395, width, 5, color(0, 0, 0, 50));//c
 screenUtils.levelProgressBar.noStroke = true;
 screenUtils.bossBar = new Bar(0, 20, width, 5, color(0, 0, 0, 100));
 screenUtils.bossBar.noStroke = true;
+screenUtils.setBossBar = function(bossName)
+{
+    if(gameObjects.getArray(bossName).length >= 1)
+    {
+         var boss = gameObjects.getArray(bossName)[0];
+         screenUtils.bossBar.set(boss.hp, boss.maxHp);
+    }
+};
 screenUtils.shakeScreen = function(intensity, time)
 {
     this.stopped = false;
@@ -1769,15 +1837,15 @@ var Lifeform = function(config)
         (obj.xPos + abs(obj.xVel + this.xVel) < this.xPos + this.width);
     };
     
-    this.handleEdges = function(amt, rule)
+    this.handleEdges = function(amt, rule, stop)
     {
-        var probeWidth = constrain(abs(this.xVel), 0, this.width / 2);
+        var probeWidth = constrain(abs(this.xVel * 2), 0, this.width / 2);//this.width - abs(this.xVel) * 2;
         var probe = {
             physics : this.physics,
             xPos : (this.xPos + this.width / 2) - probeWidth / 2,
             yPos : this.yPos + this.height,
             width : probeWidth,
-            height : 2,
+            height : 3,
         };
         
         //fill(0, 0, 0, 100);
@@ -1798,10 +1866,12 @@ var Lifeform = function(config)
             return (rule === undefined) ? false : rule(blocksBelow);
         };
         
-        if(rule1(blocksBelow) || blocksBelow.length === 0)
+        var turn = (rule1(blocksBelow) || blocksBelow.length === 0);
+        if(turn && !stop)
         {
             this.xVel = -this.xVel;    
         }
+        return {turn : turn, xVel : this.xVel};
     };
     
     this.updateLife = function()
@@ -1956,8 +2026,7 @@ gameObjects.addArray("invisibleBlock", createArray(InvisibleBlock));
 var Ice = function(config)
 {
     GameObject.call(this, config); 
-    this.color = config.color || color(33, 198, 207);//color(0, 115, 255);
-    
+    this.color = config.color || color(33, 198, 207);//color(0, 115, 255); 
     this.type = "block";
     
     this.physics = {
@@ -1969,6 +2038,8 @@ var Ice = function(config)
     };
     
     this.slipFactor = config.slipFactor || 0.10;
+    this.meltedMax = 15;
+    this.melted = 15;
     
     this.draw = function() 
     {
@@ -1977,17 +2048,19 @@ var Ice = function(config)
         rect(this.xPos, this.yPos, this.width, this.height);
         fill(this.color, this.color, this.color, 30);
         triangle(this.xPos, this.yPos + this.height, this.xPos + this.width, this.yPos, this.xPos, this.yPos);
+        fill(0, 0, 0, ((this.meltedMax - this.melted) * 255 / this.meltedMax) / 4);
+        rect(this.xPos, this.yPos, this.width, this.height);
     };
-    
+    //this.touchingIceBeaker
     this.update = function()
     {
-        if(this.height <= 1)
+        if(this.melted < 0)//this.height <= 0 || this.width <= 0)
         {
             gameObjects.addObject("water", {
-                xPos : this.xPos,
-                yPos : this.yPos - config.height,
-                width : config.width,
-                height : config.height,
+                xPos : config.xPos,
+                yPos : config.yPos,
+                width : levelInfo.unitWidth,
+                height : levelInfo.unitHeight,
             });
             this.remove();   
         }  
@@ -2708,26 +2781,26 @@ var Lava = function(config)
     this.loadDetail(config.cols || 3, config.rows || 3, this.width, this.height);
     this.loadDraw = function()
     {
-  this.images = [];
-    for(var i = 0; i < this.grids.length; i++)
-  {
-      var getWidth = this.grids[i].unitWidth * this.grids[i].length;
-      var getHeight = this.grids[i].unitHeight * this.grids[i][0].length;
-      stroke(this.color);
+        this.images = [];
+        for(var i = 0; i < this.grids.length; i++)
+        {
+            var getWidth = this.grids[i].unitWidth * this.grids[i].length;
+            var getHeight = this.grids[i].unitHeight * this.grids[i][0].length;
+            stroke(this.color);
             fill(this.color);
-      rect(0, 0, getWidth, getHeight);
-      noStroke();
-      for(var col = 0; col < this.grids[i].length; col++)
+            rect(0, 0, getWidth, getHeight);
+            noStroke();
+            for(var col = 0; col < this.grids[i].length; col++)
             {
-              for(var row = 0; row < this.grids[i][col].length; row++)
+                for(var row = 0; row < this.grids[i][col].length; row++)
                 {
                     fill(this.grids[i][col][row]);
                     rect(col * this.grids[i].unitWidth, row * this.grids[i].unitHeight, this.grids[i].unitWidth, this.grids[i].unitHeight);
                 }
             }
-      var lavaImage = get(0, 0, getWidth, getHeight);
-      this.images.push(lavaImage);
-  }
+            var lavaImage = get(0, 0, getWidth, getHeight);
+            this.images.push(lavaImage);
+        }
   
     };
    
@@ -3029,19 +3102,19 @@ gameObjects.getArray("door").targetDoor = {};
 gameObjects.getArray("door").setTargetDoor = function()
 {
     this.targetDoor = {
-  level : levelInfo.level,
-  door : levelInfo.door,
+        level : levelInfo.level,
+        door : levelInfo.door,
     };
     for(var i = 0; i < this.length; i++)
     {
-  if(this[i].targetDoor && !this[i].locked)
-  {
-      this.targetDoor = {
-    level : this[i].level,
-    door : this[i].door
-      };
-      break;
-  }
+        if(this[i].targetDoor && !this[i].locked)
+        {
+            this.targetDoor = {
+                level : this[i].level,
+                door : this[i].door
+            };
+            break;
+        }
     }
 };
 
@@ -3458,9 +3531,13 @@ var IceBreaker = function(config)
                     if(player.currentAbility === name && player.controls.useAbility())
                     {
                         var breakSpeed = player.breakSpeed || 5;
-                        obj.yPos += breakSpeed;
-                        obj.height -= breakSpeed;
-                        obj.height = max(0, obj.height);
+                        //obj.yPos += breakSpeed;
+                        //obj.xPos += breakSpeed;
+                        //obj.width -= breakSpeed * 2;
+                        //obj.height -= breakSpeed * 2;
+                        //obj.width = max(0, obj.width);
+                        //obj.height = max(0, obj.height);
+                        obj.melted--; 
                         if(obj.height === 0)
                         {
                             obj.physics.solidObject = false;   
@@ -3511,7 +3588,7 @@ var Beaker = function(config)
     this.maxHp = config.maxHp || 10;
     this.hp = this.maxHp;
     
-    this.damage = config.damage || 0.25;
+    this.damage = config.damage || 0.20;
     
     this.physics = {
         shape : "rect",
@@ -3686,6 +3763,171 @@ var Beaker2 = function(config)
 };
 gameObjects.addArray("beaker2", createArray(Beaker2));
 
+var IceBeakerBoss = function(config)
+{
+    Beaker.call(this, config);  
+    this.color = config.color || color(33, 198, 207);
+    this.remove = config.remove;
+    this.physics.usesOnCollide = true;
+    this.physics.usesOnTouch = true;
+    
+    this.lastUpdate = this.update;
+    this.damage = 0.5;//0.15;
+    this.maxHp = 300;
+    this.hp = 300;
+    this.heal = 5;
+    this.onEdge = false;
+    this.dir = 0;
+    this.setSpeed = 3;
+    
+    this.lifeFormNames = [];
+    this.lifeFormName = "";
+    this.form = {};
+    
+    this.setJump = 15;
+    this.jumpCoolDown = this.setJump;
+    this.setTurn = 50;
+    this.turnTimer = this.setTurn;
+    
+    this.climbSpeed = 3;
+    this.jumpHeight = 6;
+    
+    this.task = "patrol";
+    
+    this.formLeft = function()
+    {
+         return (this.xPos + this.width < this.form.xPos);
+    };
+    this.formRight = function()
+    {
+        return (this.xPos > this.form.xPos + this.form.width);
+    };
+    this.formUp = function()
+    {
+        return (this.yPos < this.form.yPos + this.form.height);
+    };
+    
+    this.update = function()
+    {
+        this.lastUpdate();
+      
+        if(this.lifeFormNames.length > 0)
+        {
+            this.lifeFormName = this.lifeFormNames[0];
+        }
+        if(this.lifeFormName !== "")
+        {
+            this.form = gameObjects.getArray(this.lifeFormName)[0];
+        }
+        
+        if(this.form === undefined)
+        {
+             this.form = {}; 
+        }
+        
+        if(this.onEdge && !this.inAir && this.turnTimer <= 0)
+        {
+            if(this.dir > 0)
+            {
+                this.xVel = -this.setSpeed;
+            }
+            else if(this.dir < 0)
+            {
+                this.xVel = this.setSpeed;
+            }
+            this.turnTimer = this.setTurn;
+        }
+        else if(this.form.draw !== undefined)
+        {
+             if(this.formLeft()) 
+             {
+                 this.xVel = this.setSpeed;
+             }
+             else if(this.formRight()) 
+             {
+                 this.xVel = -this.setSpeed;
+             }  
+             
+             if(!this.inAir && this.yPos < this.form.yPos && this.jumpCoolDown <= 0)
+             {
+                  this.yVel = -this.jumpHeight * 1.5; 
+                  this.jumpCoolDown = this.setJump;
+             }
+        }
+        
+        this.jumpCoolDown--;
+        this.turnTimer--;
+        this.lifeFormNames = [];
+        this.hitSide = false;
+    };
+    
+    this.myHandleEdges = Beaker2.prototype.myHandleEdges;
+    
+    this.onTouch = function(object)
+    {
+        var doIce = (object.name === "ice" && (random(0, 100) < 0.1));
+        if(object.name === "water" || doIce)
+        {
+             object.color = (random(0, 100) > 20) ? this.color : color(0, 0, 0, 100);
+             object.color = (doIce) ? color(0, 0, 0, 100) : this.color;
+             gameObjects.addObject("ice", object);
+             object.remove();
+        }
+        else if(object.name === "ice")
+        {
+            if(object.color === color(0, 0, 0, 100))
+            {
+                this.hp += this.heal;
+                this.yPos -= this.width / 12;
+                this.yVel = -this.maxYVel * 0.2;
+            }
+        }
+    };
+    
+    this.onCollide = function(object)
+    {
+        switch(object.type)
+        {
+            case "lifeform" :
+                this.lifeFormNames.push(object.name);
+                if(object.physics.shape === "rect" && this.ontop(object))
+                {
+                    this.hp -= object.damage;   
+                    object.yPos = this.yPos - object.height;
+                    object.yVel = -object.maxYVel * 0.5;
+                }else{
+                    object.hp -= this.damage;
+                }
+                break;
+                
+            case "block" :
+                var hand = this.handleEdges(2, this.myHandleEdges, true);
+                this.dir = hand.xVel;
+                this.onEdge = hand.turn;
+                this.hitSide = this.hitWall(object);
+                if(this.hitSide && !(this.formUp() && !this.formLeft() && !this.formRight()))
+                { 
+                    if(object.name === "water" || object.name === "ice")
+                    {
+                        this.yVel = -this.climbSpeed;
+                    }
+                    if(!this.inAir)
+                    {
+                        this.yVel = -this.jumpHeight; 
+                        this.inAir = true;
+                    }
+                }
+                return this.hitSide;
+                break;
+                
+            case "collision" : 
+                this.hitWall(object.physics.boundingBox);    
+                break;
+        }
+    };
+};
+gameObjects.addArray("iceBeakerBoss", createArray(IceBeakerBoss));
+
 var RedBeakerBoss = function(config)
 {
     Beaker2.call(this, config);
@@ -3751,8 +3993,7 @@ var RedBeakerBoss = function(config)
         {
             this.yVel -= this.upPush;
         }
-        particles.create(this.xPos + this.width/2, this.yPos + this.height, 5, 10,
-        color(200, 20, 20));
+        particles.create(this.xPos + this.width/2, this.yPos + this.height, 5, 10, color(200, 20, 20));
     };
     
     this.canSpawnBeaker2s = true;
@@ -3856,10 +4097,9 @@ var RedBeakerBoss = function(config)
     this.onCollide = function(obj)
     {
         var next = false;
-        if(obj.name === "beaker" || obj.name === "beaker2" || 
-        obj.name === "lava")
+        if(obj.name === "beaker" || obj.name === "beaker2" || obj.name === "lava")
         {
-            return false;   
+            return false;    
         }
         if(obj.name === "water")
         {
@@ -3877,7 +4117,7 @@ var RedBeakerBoss = function(config)
                     break;
                     
                 case "block":
-                  obj.useStoredImages = true;
+                        obj.useStoredImages = true;
                         gameObjects.addObject("lava", obj);
                         obj.remove();
                     break;
@@ -3890,8 +4130,7 @@ var RedBeakerBoss = function(config)
             switch(obj.type)
             {
                 case "lifeform" :
-                    if(obj.physics.shape === "rect" && this.ontop(obj) && 
-                    this.rocketTimer <= 0)
+                    if(obj.physics.shape === "rect" && this.ontop(obj) && this.rocketTimer <= 0)
                     {
                         this.hp -= obj.damage;   
                         obj.yPos = this.yPos - obj.height;
@@ -4112,27 +4351,6 @@ var Player = function(config)
                 this.yVel = 0;
             }
         }
-
-        //Disabled crouch effect causes extreme amount of physics glitches
-        /*if(this.controls.down())
-        {
-            if(this.height !== this.crouchHeight)
-            {
-          this.yPos += this.crouchHeight;
-                this.height = this.crouchHeight;
-            }
-            this.crouching = true;
-        }else{
-            this.height = this.normalHeight;  
-            if(this.crouching)
-            {
-          if(!this.inAir)
-          {
-              this.xVel = 0;
-          }
-          this.crouching = false;
-            }
-        }*/
     };
     
     this.draw = function() 
@@ -4205,8 +4423,8 @@ var levels = {
             "                   ",
             "                   ",
             "                   ",
-            "  a                ",
-            "  D |||///         ",
+            "a                  ",
+            "D                  ",
             "ggggggggggggggggggg",
         ],
     },
@@ -4279,7 +4497,7 @@ var levels = {
             'b' : {
                 targetDoor : true,
                 level : "Circlade_Parkour",
-                door : 'b'
+                door : 'a'
             },
         },
         plan : [
@@ -4300,20 +4518,20 @@ var levels = {
         background : "ice",
         doors : {
             'a' : {
+                level : "Cave",
+                door : 'b'
+            },
+            'b' : {
                 targetDoor : true,
                 level : "Dogde_Tower",
                 door : 'a',
-            },
-            'b' : {
-                level : "Cave",
-                door : 'd'
             },
         },
         plan : [
             "bbbbbbbbbbbbbbbbbbbbb",
             "bbb             bbbbb",
             "bbb                 b",
-            "bbb                ab",
+            "bbb                bb",
             "bbb        rb      Db",
             "bbb   O    bbb     bb",
             "bbb  o      #     #bb",
@@ -4325,7 +4543,7 @@ var levels = {
             "bL           rb    bb",
             "b    O       b##   bb",
             "b             #    bb",
-            "bb       rb        bb",
+            "ba       rb        bb",
             "bD      rbb        bb",
             "bbbbbbbbbbbbbbbbbbbbb",
         ],
@@ -4473,6 +4691,7 @@ var levels = {
                 level : "Rewards!",
                 door : 'a',
                 locked : true,
+                targetDoor : true,
             },
         },
         bosses : {
@@ -4483,11 +4702,7 @@ var levels = {
         },
         act : function()
         {
-            if(gameObjects.getArray("redBeakerBoss").length >= 1)
-            {
-                var boss = gameObjects.getArray("redBeakerBoss")[0];
-                screenUtils.bossBar.draw(boss.hp, boss.maxHp);
-            }
+            screenUtils.setBossBar("redBeakerBoss");
         },
         plan : [
             "          ",
@@ -4511,6 +4726,7 @@ var levels = {
                 door : 'b',
             },
             'b' : {
+                targetDoor : true,
                 level : "Volcanic_System",
                 door : 'a'
             },
@@ -4922,7 +5138,8 @@ var levels = {
                 door : 'b',
             },
             'b' : {
-                level : "Dimension_Bridge",
+                targetDoor : true,
+                level : "Ice_Boss_Room",
                 door : 'a',
             },
             'c' : {
@@ -4962,14 +5179,65 @@ var levels = {
             "biiiiiiiiiiiiiibb                                                                                                            ",
         ],  
     },
+    "Ice_Boss_Room" : {
+        background : "ice",
+        doors : {
+            'a' : {
+                level : "Super_Dash",
+                door : 'b',
+                locked : true,
+            },
+            'b' : {
+                level : "Dimension_Bridge",
+                door : 'a',
+                locked : true,
+                targetDoor : true,
+            },
+        },
+        bosses : {
+            'a' : {
+                 boss : "iceBeakerBoss",
+                 defeated : false,
+            },
+        },
+        powers : {
+            'a' : {
+                name : "iceBreaker",
+                collected : false,
+            },
+        },
+        act : function()
+        {   
+            screenUtils.setBossBar("iceBeakerBoss");
+        },
+        signs : {
+            'a' : {
+                message : "Ice Beaker Boss (Work in progress)",
+            },
+        },
+        plan : [ 
+            "                         ",
+            "                         ",
+            "                         ",
+            "                         ",
+            "                         ",
+            "                         ",
+            "        iw          b    ",
+            "        iw    a    bi    ",
+            "a  a a  iw    $   bii   b",
+            "D  S *  ddwwwwwwwwwdd   D",
+            "iiiiiiiidddddddddddddiiii",
+        ],
+    },
     "Dimension_Bridge" : {
         background : "underground",
         doors : {
             'a' : {
-                level : 'Super_Dash',
+                level : 'Ice_Boss_Room',
                 door : 'b',
             },
             'b' : {
+                targetDoor : true,
                 level : "Finish",
                 door : 'a',
             }
@@ -4996,10 +5264,6 @@ var levels = {
             }
         },
         plan : [
-            "                                                                                                                                                     ",
-            "                                                                                                                                                     ",
-            "                                                                                                                                                     ",
-            "                                                                                                                                                     ",
             "                                                                                                                                                     ",
             "                                                                                                                                                     ",
             "                                                                                                                                                     ",
@@ -5056,6 +5320,18 @@ levels.getSymbol = function(col, row, levelPlan)
         return " ";    
     }
 };
+levels.makeList = function()
+{
+    this.levelNames = [];
+    for(var i in this)
+    {
+        if(this[i].plan !== undefined)
+        {
+            this.levelNames.push(i);
+        }
+    }   
+};
+levels.makeList();
 levels.build = function(plan)
 {
     var level = this[plan.level];
@@ -5495,6 +5771,7 @@ var debugTools = function()
     textSize(12);
     text("player.xVel :"  + player.xVel.toFixed(1), 5, 35);
     text("player.yVel :"  + player.yVel.toFixed(1), 5, 50);
+    text("fps " + game.fps + ", afps " + fpsStabilizer.lastCountedFrames + ", cf " + fpsStabilizer.countedFrames + ", second " + second(), 225, 30);
 };
 
 loader.startLevelLoading = function(config)
@@ -5541,13 +5818,14 @@ var mainLoop = function()
     pushMatrix();
         levels[levelInfo.level].act();
         cam.view(gameObjects.getArray("player")[0]);
+        particles.draw();
         gameObjects.apply();
         //gameObjects.drawBoundingBoxes();
     popMatrix();
     debugTools();
     infoBar.draw();
-    particles.draw();
     particles.update();
+    screenUtils.bossBar.draw();
 };
 
 game.options = function()
@@ -5609,7 +5887,7 @@ game.pause.setup = function()
         height : 30,
         message : "Continue",
         name : "continue",
-        color : color(11, 68, 153, 100)//color(10, 10, 10, 50)
+        color : color(11, 68, 153, 100)
     });
     buttons.add({
         xPos : 150,
@@ -5644,11 +5922,6 @@ game.menu = function()
     {
         switch(true)
         {     
-            case buttons.getButton("newGame").IsMouseInside() : 
-                    levelInfo.level = levelInfo.firstLevel;
-                    levelInfo.door = levelInfo.firstDoor;
-                    loader.startLevelLoading(levelInfo); 
-                  break;
             case buttons.getButton("play").IsMouseInside() : 
                     this.gameState = "play";
                 break;
@@ -5656,12 +5929,12 @@ game.menu = function()
                     this.gameState = "howTo";
                     this.howTo.setup();
                 break;
-            
-            /*case buttons.getButton("levelMaker").IsMouseInside() :
-                    this.gameState = "levelMaker";
-                    this.levelMaker.setup();
-                break;*/
+            case buttons.getButton("options").IsMouseInside() :
+                    this.gameState = "opts";
+                    this.opts.setup();
+                break;
         }
+        mouseIsPressed = false;
     }
 };
 game.menu.setup = function()
@@ -5681,8 +5954,8 @@ game.menu.setup = function()
         yPos : 220,
         width : 110,
         height : 30,
-        message : "New Game",
-        name : "newGame",
+        message : "How To",
+        name : "howTo",
         color : color(11, 68, 153, 100),
     });
     buttons.add({
@@ -5690,19 +5963,153 @@ game.menu.setup = function()
         yPos : 260,
         width : 110,
         height : 30,
-        message : "How To",
-        name : "howTo",
+        message : "Options",
+        name : "options",
         color : color(11, 68, 153, 100),
     });
-    /*buttons.add({
+};
+game.opts = function()
+{
+    backgrounds.draw();
+    buttons.draw();
+    fill(0, 0, 0, 50);
+    rect(50, 0, width - 100, height);
+    textSize(40);
+    fill(11, 68, 153, 100);
+    textAlign(CENTER, CENTER);
+    text("Options", 200, 100);
+    
+    var debugModeButton = buttons.getButton("debugMode");
+    debugModeButton.message = (debugModeButton.is) ? "Debug mode on" : "Debug mode off";
+    var levelButton = buttons.getButton("level");
+    levelButton.message = "Level " + levelButton.level;
+    var setButton = buttons.getButton("set");
+    var fixedFpsButton = buttons.getButton("fixedFps");
+    fixedFpsButton.message = (fixedFpsButton.is) ? "Fixed fps on" : "Fixed fps off";
+    
+    if(mouseIsPressed)
+    {
+        switch(true)
+        {
+            case buttons.getButton("back").IsMouseInside() : 
+                  if(this.optsLoadLevel)
+                  {
+                      levelInfo.door = 'a';
+                      this.gameState = "play";
+                      loader.startLevelLoading(levelInfo);
+                  }else{
+                      this.gameState = "menu";
+                      this.menu.setup();
+                  }
+                break;
+                
+            case fixedFpsButton.IsMouseInside() :
+                     fixedFpsButton.is = fixedFpsButton.is ? false : true;
+                     setButton.set = false;
+                     setButton.color = color(11, 68, 153, 100);
+                break
+                
+            case debugModeButton.IsMouseInside() : 
+                     debugModeButton.is = debugModeButton.is ? false : true;
+                     setButton.set = false;
+                     setButton.color = color(11, 68, 153, 100);
+                break;
+                
+            case levelButton.IsMouseInside() :
+                    levelButton.levelNum++; 
+                    if(levelButton.levelNum >= levels.levelNames.length)
+                    {
+                         levelButton.levelNum = 0;
+                    }
+                    levelButton.level = levels.levelNames[levelButton.levelNum];
+                    setButton.set = false;
+                    setButton.color = color(11, 68, 153, 100);
+                break;
+                
+            case setButton.IsMouseInside() : 
+                  setButton.set = (setButton.set) ? false : true;
+                  setButton.color = (setButton.set) ? color(0, 200, 0, 100) : color(200, 0, 0, 100);
+                  if(setButton.set)
+                  {
+                      this.debugMode = debugModeButton.is;
+                      this.optsLoadLevel = (levelInfo.level !== levelButton.level);
+                      levelInfo.level = levelButton.level;
+                      this.fixedFps = fixedFpsButton.is;
+                  }else{
+                      this.debugMode = game.optsOriginal.debugMode;
+                      this.optsLoadLevel = game.optsOriginal.optsLoadLevel;
+                      levelInfo.level = game.optsOriginal.level;
+                      this.fixedFps = game.optsOriginal.fixedFps;
+                  }
+                break;
+        }
+        mouseIsPressed = false;
+    }
+};
+game.opts.setup = function()
+{
+    this.optsLoadLevel = false;
+    buttons.clear();   
+    buttons.add({
         xPos : 150,
-        yPos : 270,
+        yPos : 160,
         width : 110,
         height : 30,
-        message : "Level Maker",
-        name : "levelMaker",
+        message : "Fixed Fps",
+        name : "fixedFps",
         color : color(11, 68, 153, 100),
-    });*/
+    });
+    var fixedFpsButton = buttons.getButton("fixedFps");
+    fixedFpsButton.is = this.fixedFps;
+    buttons.add({
+        xPos : 0,
+        yPos : 350,
+        width : 50,
+        height : 50,
+        message : "Back",
+        name : "back",
+        color : color(11, 68, 153, 100),
+    });
+    buttons.add({
+        xPos : 150,
+        yPos : 200,
+        width : 110,
+        height : 30,
+        message : "Level ",
+        name : "level",
+        color : color(11, 68, 153, 100),
+    });
+    var levelButton = buttons.getButton("level");
+    levelButton.level = levelInfo.level;
+    levelButton.levelNum = 0;
+    buttons.add({
+        xPos : 150,
+        yPos : 240,
+        width : 110,
+        height : 30,
+        message : "Debug mode",
+        name : "debugMode",
+        color : color(11, 68, 153, 100),
+    });
+    var debugModeButton = buttons.getButton("debugMode");
+    debugModeButton.is = this.debugMode;
+    buttons.add({
+        xPos : 150,
+        yPos : 280,
+        width : 110,
+        height : 30,
+        message : "Set",
+        name : "set",
+        color : color(11, 68, 153, 100),
+    });
+    var setButton = buttons.getButton("set");
+    setButton.set = false;
+    game.optsOriginal = {
+        debugMode : this.debugMode,
+        optsLoadLevel : this.optsLoadLevel,
+        level : levelInfo.level,
+        fixedFps : fixedFpsButton.is,
+    };
 };
 game.howTo = function()
 {
@@ -5736,7 +6143,7 @@ game.howTo.setup = function()
         height : 50,
         message : "Back",
         name : "back",
-        color : color(10, 10, 10, 50)
+        color : color(11, 68, 153, 100)
     });
 };
 game.load = function()
@@ -5754,32 +6161,6 @@ game.load = function()
     }
     image(this.img, 0, 0);
     fade();
-};
-game.levelMaker = function()
-{
-    backgrounds.draw();
-    buttons.draw();
-    if(mouseIsPressed)
-    {
-        if(buttons.getButton("menu").IsMouseInside())
-        {
-            this.gameState = "menu";
-            this.menu.setup();
-        }   
-    }
-};
-game.levelMaker.setup = function()
-{
-    buttons.clear();
-    buttons.add({
-        xPos : 0,
-        yPos : 370,
-        width : 50,
-        height : 30,
-        message : "Menu",
-        name : "menu",
-        color : color(10, 10, 10, 50)
-    });
 };
 game.play = mainLoop;
 
@@ -5806,6 +6187,8 @@ draw = function()
     }    
     
     game[game.gameState]();
+    
+    fpsStabilizer.count();
 };
 
 var lastKeyPressed = keyPressed;
