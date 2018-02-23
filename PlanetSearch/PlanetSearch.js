@@ -1073,6 +1073,8 @@ screenUtils.setBossBar = function(bossName)
     {
          var boss = gameObjects.getArray(bossName)[0];
          screenUtils.bossBar.set(boss.hp, boss.maxHp);
+    }else{
+        screenUtils.bossBar.set(0, 0);
     }
 };
 screenUtils.shakeScreen = function(intensity, time)
@@ -3772,13 +3774,12 @@ var IceBeakerBoss = function(config)
     this.physics.usesOnTouch = true;
     
     this.lastUpdate = this.update;
-    this.damage = 0.5;//0.15;
+    this.damage = 0.15;//0.5;//0.15;
     this.maxHp = 300;
     this.hp = 300;
-    this.heal = 5;
+    this.heal = 4;
     this.onEdge = false;
     this.dir = 0;
-    this.setSpeed = 3;
     
     this.lifeFormNames = [];
     this.lifeFormName = "";
@@ -3786,7 +3787,7 @@ var IceBeakerBoss = function(config)
     
     this.setJump = 15;
     this.jumpCoolDown = this.setJump;
-    this.setTurn = 50;
+    this.setTurn = 10;
     this.turnTimer = this.setTurn;
     
     this.climbSpeed = 3;
@@ -3794,23 +3795,37 @@ var IceBeakerBoss = function(config)
     
     this.task = "patrol";
     
+    this.walkSpeed = 1.5;
+    this.runSpeed = 3;
+    this.setSpeed = this.walkSpeed;
+    
+    this.belowForm = false;
+    this.attackMode = "near";
+    this.escapeCoolDown = 0;
+    this.setDir = 0;
+    
+    this.hits = 0;
+    
     this.formLeft = function()
     {
-         return (this.xPos + this.width < this.form.xPos);
+         return (this.form.xPos + this.form.width < this.xPos);
     };
     this.formRight = function()
     {
-        return (this.xPos > this.form.xPos + this.form.width);
+        return (this.form.xPos > this.xPos + this.width);
     };
     this.formUp = function()
     {
-        return (this.yPos < this.form.yPos + this.form.height);
+        return (this.form.yPos + this.form.height < this.yPos);
+    };
+    this.formDown = function()
+    {
+        return (this.form.yPos > this.yPos + this.height);
     };
     
     this.update = function()
     {
         this.lastUpdate();
-      
         if(this.lifeFormNames.length > 0)
         {
             this.lifeFormName = this.lifeFormNames[0];
@@ -3825,7 +3840,54 @@ var IceBeakerBoss = function(config)
              this.form = {}; 
         }
         
-        if(this.onEdge && !this.inAir && this.turnTimer <= 0)
+        this.task = (this.form.hp === undefined || this.form.hp <= 0) ? "patrol" : "attack";
+        
+        //Set speed based on task
+        if(this.task === "attack")
+        {
+            this.setSpeed = this.runSpeed;
+        }
+        else if(this.task === "patrol")
+        {
+            this.setSpeed = this.walkSpeed; 
+        }
+        
+        if(this.task === "attack" && this.form.draw !== undefined)
+        {
+            if(this.attackMode === "near")
+            {
+                if(this.formLeft()) 
+                {
+                    this.xVel = -this.setSpeed;
+                }
+                else if(this.formRight()) 
+                {
+                    this.xVel = this.setSpeed;
+                }
+            }
+            else if(this.attackMode === "escape")
+            {
+                if(!this.formLeft() && !this.formRight())
+                {
+                     this.xVel = this.setDir * this.setSpeed; 
+                }else{
+                    if(this.formLeft()) 
+                    {
+                        this.xVel = this.setSpeed;
+                    }
+                    else if(this.formRight()) 
+                    {
+                        this.xVel = -this.setSpeed;
+                    }
+                }
+            }
+            if(!this.inAir && this.yPos < this.form.yPos && this.jumpCoolDown <= 0)
+            {
+                this.yVel = -this.jumpHeight * 1.5; 
+                this.jumpCoolDown = this.setJump;
+            }
+        }
+        else if(this.task === "patrol" && this.onEdge && !this.inAir && this.turnTimer <= 0)
         {
             if(this.dir > 0)
             {
@@ -3835,37 +3897,33 @@ var IceBeakerBoss = function(config)
             {
                 this.xVel = this.setSpeed;
             }
+            
+            if(this.xVel === 0)
+            {
+                 this.xVel = (random(0, 100) > 50) ? this.setSpeed : -this.setSpeed;
+            }
+            
             this.turnTimer = this.setTurn;
-        }
-        else if(this.form.draw !== undefined)
-        {
-             if(this.formLeft()) 
-             {
-                 this.xVel = this.setSpeed;
-             }
-             else if(this.formRight()) 
-             {
-                 this.xVel = -this.setSpeed;
-             }  
-             
-             if(!this.inAir && this.yPos < this.form.yPos && this.jumpCoolDown <= 0)
-             {
-                  this.yVel = -this.jumpHeight * 1.5; 
-                  this.jumpCoolDown = this.setJump;
-             }
         }
         
         this.jumpCoolDown--;
         this.turnTimer--;
+        this.escapeCoolDown--;
         this.lifeFormNames = [];
         this.hitSide = false;
+        this.belowForm = (this.formUp() && !this.formLeft() && !this.formRight());
+        
+        if(this.attackMode === "escape" && this.escapeCoolDown <= 0)
+        {
+             this.attackMode = "near";
+        }
     };
     
     this.myHandleEdges = Beaker2.prototype.myHandleEdges;
     
     this.onTouch = function(object)
     {
-        var doIce = (object.name === "ice" && (random(0, 100) < 0.1));
+        var doIce = (object.name === "ice" && (random(0, 100) < 0.2));
         if(object.name === "water" || doIce)
         {
              object.color = (random(0, 100) > 20) ? this.color : color(0, 0, 0, 100);
@@ -3880,6 +3938,7 @@ var IceBeakerBoss = function(config)
                 this.hp += this.heal;
                 this.yPos -= this.width / 12;
                 this.yVel = -this.maxYVel * 0.2;
+                this.inAir = true;
             }
         }
     };
@@ -3889,13 +3948,30 @@ var IceBeakerBoss = function(config)
         switch(object.type)
         {
             case "lifeform" :
+                if(object.name === "beaker")
+                {
+                    return;
+                }
                 this.lifeFormNames.push(object.name);
                 if(object.physics.shape === "rect" && this.ontop(object))
                 {
                     this.hp -= object.damage;   
                     object.yPos = this.yPos - object.height;
                     object.yVel = -object.maxYVel * 0.5;
-                }else{
+                    if(this.form !== undefined && object.name === this.form.name)
+                    {
+                         this.hits++;
+                         if(this.hits >= 5)
+                         {
+                             this.attackMode = "escape"; 
+                             this.escapeCoolDown = 200;
+                             this.setDir = (random(0, 100) > 50) ? 1 : -1;
+                             this.hits = 0;
+                         }
+                    }
+                }
+                else if(this.task === "attack")
+                {
                     object.hp -= this.damage;
                 }
                 break;
@@ -3905,17 +3981,17 @@ var IceBeakerBoss = function(config)
                 this.dir = hand.xVel;
                 this.onEdge = hand.turn;
                 this.hitSide = this.hitWall(object);
-                if(this.hitSide && !(this.formUp() && !this.formLeft() && !this.formRight()))
+                if(this.task === "attack" && this.hitSide && !(this.formUp() && !this.formLeft() && !this.formRight()))
                 { 
                     if(object.name === "water" || object.name === "ice")
                     {
                         this.yVel = -this.climbSpeed;
                     }
-                    if(!this.inAir)
-                    {
-                        this.yVel = -this.jumpHeight; 
-                        this.inAir = true;
-                    }
+                }
+                if(this.hitSide && !this.inAir)
+                {
+                    this.yVel = -this.jumpHeight; 
+                    this.inAir = true;
                 }
                 return this.hitSide;
                 break;
@@ -5216,17 +5292,17 @@ var levels = {
             },
         },
         plan : [ 
-            "                         ",
-            "                         ",
-            "                         ",
-            "                         ",
-            "                         ",
-            "                         ",
-            "        iw          b    ",
-            "        iw    a    bi    ",
-            "a  a a  iw    $   bii   b",
-            "D  S *  ddwwwwwwwwwdd   D",
-            "iiiiiiiidddddddddddddiiii",
+            "i                         i",
+            "i                         i",
+            "i                         i",
+            "i                         i",
+            "i                         i",
+            "i                         i",
+            "i        iw          b    i",
+            "i        iw    a    bi    i",
+            "ia  a a  iw    $   bii   bi",
+            "iD  S *  ddwwwwwwwwwdd   Di",
+            "iiiiiiiiidddddddddddddiiiii",
         ],
     },
     "Dimension_Bridge" : {
